@@ -1,0 +1,12 @@
+user gateway-casa
+topic read casa/mega/comando/#
+topic write casa/mega/status
+topic write casa/mega/evento/#
+topic write casa/mega/telemetria/#
+
+user api-casa
+topic write casa/mega/comando/#
+topic read casa/mega/status
+topic read casa/mega/evento/#
+topic read casa/mega/telemetria/#
+

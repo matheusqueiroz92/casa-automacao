@@ -1,0 +1,16 @@
+# Segredos
+**/.env
+**/.env.*
+!**/.env.example
+firmware/**/arduino_secrets.h
+deploy/mosquitto/config/passwords
+
+# Dependencias e builds
+**/node_modules/
+**/dist/
+
+# Artefatos locais
+*.zip
+work/
+
+
