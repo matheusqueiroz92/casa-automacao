@@ -1,0 +1,17 @@
+{
+  "name": "@casa/eslint-config",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./node": "./node.js"
+  },
+  "dependencies": {
+    "@eslint/js": "^9.39.1",
+    "globals": "^16.5.0",
+    "typescript-eslint": "^8.48.1"
+  },
+  "peerDependencies": {
+    "eslint": ">=9"
+  }
+}

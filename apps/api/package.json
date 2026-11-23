@@ -1,0 +1,43 @@
+{
+  "name": "@casa/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "npm run db:migrate && dotenv -e ../../deploy/.env -- tsx watch --conditions=development src/server.ts",
+    "db:migrate": "dotenv -e ../../deploy/.env -- tsx src/infrastructure/database/migrate.ts",
+    "db:migrate:prod": "node dist/infrastructure/database/migrate.js",
+    "auth:create-admin": "dotenv -e ../../deploy/.env -- npx auth@1.7.27 create-admin --config src/auth.ts",
+    "build": "tsc -p tsconfig.build.json",
+    "lint": "eslint .",
+    "start": "node dist/server.js",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@better-auth/expo": "^1.7.27",
+    "@casa/contracts": "*",
+    "@fastify/cors": "^11.2.0",
+    "@node-rs/argon2": "^2.2.2",
+    "better-auth": "^1.7.27",
+    "dotenv": "^17.0.0",
+    "fastify": "^5.0.0",
+    "mqtt": "^5.16.1",
+    "pg": "^8.23.1",
+    "pino": "^10.1.0",
+    "postgres": "^3.4.0"
+  },
+  "devDependencies": {
+    "@casa/eslint-config": "*",
+    "@casa/typescript-config": "*",
+    "@types/node": "^22.0.0",
+    "@types/pg": "^8.23.1",
+    "dotenv-cli": "^11.0.0",
+    "tsx": "^4.0.0",
+    "typescript": "^5.0.0"
+  }
+}

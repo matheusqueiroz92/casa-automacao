@@ -1,0 +1,47 @@
+{
+  "name": "@casa/contracts",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "files": ["dist"],
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "react-native": "./src/index.ts",
+      "development": "./src/index.ts",
+      "default": "./dist/index.js"
+    },
+    "./auth": {
+      "types": "./src/auth.ts",
+      "react-native": "./src/auth.ts",
+      "development": "./src/auth.ts",
+      "default": "./dist/auth.js"
+    },
+    "./automation": {
+      "types": "./src/automation.ts",
+      "react-native": "./src/automation.ts",
+      "development": "./src/automation.ts",
+      "default": "./dist/automation.js"
+    },
+    "./validators": {
+      "types": "./src/validators.ts",
+      "react-native": "./src/validators.ts",
+      "development": "./src/validators.ts",
+      "default": "./dist/validators.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "lint": "eslint .",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@sinclair/typebox": "^0.34.41"
+  },
+  "devDependencies": {
+    "@casa/eslint-config": "*",
+    "@casa/typescript-config": "*"
+  }
+}

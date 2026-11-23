@@ -1,7 +1,11 @@
 # Diagnostico Mega + W5100 + MQTT
 
 Este sketch valida a comunicacao entre o Arduino Mega, o Ethernet Shield W5100 e o
-Mosquitto local. Ele nao controla relés, bombas, valvulas ou alimentadores.
+Mosquitto local. Ele tambem valida o protocolo dos comandos de irrigacao, agua e
+racao, mas ainda nao controla relés, bombas, valvulas ou alimentadores.
+
+`ACTUATORS_CONFIGURED` permanece `false`. Os comandos validos recebem a resposta
+`rejected|hardware_unconfigured`, e nenhum pino de saida e configurado ou acionado.
 
 ## Bibliotecas
 
@@ -59,6 +63,30 @@ O assinante deve receber:
 ```text
 casa/mega/evento/teste mega recebeu o comando
 ```
+
+## Teste seguro dos comandos de automacao
+
+O payload usa o formato `commandId|valor`. Os limites gravados no Mega sao:
+
+- irrigacao: ate 45 segundos;
+- enchimento de agua: ate 30 segundos;
+- racao: ate 120 gramas.
+
+Exemplo de teste dentro do limite:
+
+```bash
+mosquitto_pub -h 127.0.0.1 -u mega -P "$MQTT_PASS" \
+  -t casa/mega/comando/irrigacao -m 'teste-manual|15'
+```
+
+Resposta esperada enquanto o hardware nao estiver configurado:
+
+```text
+casa/mega/evento/comando teste-manual|rejected|hardware_unconfigured
+```
+
+Um valor acima do limite, como `teste-manual|46`, deve retornar
+`rejected|safety_limit`.
 
 Ao terminar, remova a senha da variavel nos dois terminais:
 

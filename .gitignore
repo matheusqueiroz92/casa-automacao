@@ -4,10 +4,13 @@
 !**/.env.example
 firmware/**/arduino_secrets.h
 deploy/mosquitto/config/passwords
+deploy/raspberry/bridge-vps.conf
 
 # Dependencias e builds
 **/node_modules/
 **/dist/
+**/.turbo/
+**/coverage/
 
 # Artefatos locais
 *.zip

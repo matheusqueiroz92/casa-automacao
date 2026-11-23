@@ -1,0 +1,9 @@
+# Acrescente este bloco ao arquivo ACL ja usado pelo Mosquitto da Raspberry.
+# Nao substitua as regras existentes do usuario mega.
+
+user bridge-casa
+topic write casa/mega/comando/#
+topic read casa/mega/status
+topic read casa/mega/evento/#
+topic read casa/mega/telemetria/#
+topic write casa/gateway/ponte/status

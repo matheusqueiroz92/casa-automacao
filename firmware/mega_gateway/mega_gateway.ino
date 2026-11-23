@@ -18,7 +18,21 @@ const char MQTT_CLIENT_ID[] = "mega-central-01";
 const char TOPIC_STATUS[] = "casa/mega/status";
 const char TOPIC_TEST_COMMAND[] = "casa/mega/comando/teste";
 const char TOPIC_TEST_RESPONSE[] = "casa/mega/evento/teste";
+const char TOPIC_IRRIGATION_COMMAND[] = "casa/mega/comando/irrigacao";
+const char TOPIC_WATER_COMMAND[] = "casa/mega/comando/agua";
+const char TOPIC_FEEDING_COMMAND[] = "casa/mega/comando/racao";
+const char TOPIC_AUTOMATION_RESPONSE[] = "casa/mega/evento/comando";
 const char TOPIC_UPTIME[] = "casa/mega/telemetria/uptime";
+
+// Limites soberanos do firmware. A API e o app usam os mesmos valores,
+// mas somente estas constantes determinam o que o Mega aceitaria executar.
+const uint16_t MAX_IRRIGATION_SECONDS = 45;
+const uint16_t MAX_WATER_SECONDS = 30;
+const uint16_t MAX_FEEDING_GRAMS = 120;
+
+// Permanece falso ate que relés, sensores, pinos e fail-safes sejam definidos
+// e validados fisicamente. Este sketch nunca energiza uma saída.
+const bool ACTUATORS_CONFIGURED = false;
 
 const unsigned long MQTT_RECONNECT_INTERVAL_MS = 5000UL;
 const unsigned long HEARTBEAT_INTERVAL_MS = 30000UL;
@@ -28,12 +42,57 @@ MQTTClient mqttClient(256);
 
 bool networkReady = false;
 bool testResponsePending = false;
+bool automationResponsePending = false;
+String automationResponsePayload;
 unsigned long lastMqttAttemptMs = 0;
 unsigned long lastHeartbeatMs = 0;
 
 void printIp(const char *label, IPAddress address) {
   Serial.print(label);
   Serial.println(address);
+}
+
+bool containsOnlyDigits(const String &value) {
+  if (value.length() == 0) {
+    return false;
+  }
+
+  for (unsigned int index = 0; index < value.length(); index++) {
+    if (!isDigit(value.charAt(index))) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+void queueAutomationResponse(const String &payload, uint16_t maximumValue) {
+  const int separatorIndex = payload.indexOf('|');
+  if (separatorIndex <= 0) {
+    automationResponsePayload = "unknown|rejected|invalid_payload";
+    automationResponsePending = true;
+    return;
+  }
+
+  const String commandId = payload.substring(0, separatorIndex);
+  const String rawValue = payload.substring(separatorIndex + 1);
+
+  if (!containsOnlyDigits(rawValue)) {
+    automationResponsePayload = commandId + "|rejected|invalid_payload";
+  } else {
+    const unsigned long requestedValue = rawValue.toInt();
+    if (requestedValue < 1 || requestedValue > maximumValue) {
+      automationResponsePayload = commandId + "|rejected|safety_limit";
+    } else if (!ACTUATORS_CONFIGURED) {
+      automationResponsePayload = commandId + "|rejected|hardware_unconfigured";
+    } else {
+      // Mesmo que a constante seja alterada por engano, nenhuma saída será
+      // acionada até que a implementação física seja adicionada explicitamente.
+      automationResponsePayload = commandId + "|rejected|actuator_not_implemented";
+    }
+  }
+
+  automationResponsePending = true;
 }
 
 void onMqttMessage(String &topic, String &payload) {
@@ -46,6 +105,12 @@ void onMqttMessage(String &topic, String &payload) {
   // A resposta sera publicada fora do callback para evitar bloqueios na biblioteca.
   if (topic == TOPIC_TEST_COMMAND) {
     testResponsePending = true;
+  } else if (topic == TOPIC_IRRIGATION_COMMAND) {
+    queueAutomationResponse(payload, MAX_IRRIGATION_SECONDS);
+  } else if (topic == TOPIC_WATER_COMMAND) {
+    queueAutomationResponse(payload, MAX_WATER_SECONDS);
+  } else if (topic == TOPIC_FEEDING_COMMAND) {
+    queueAutomationResponse(payload, MAX_FEEDING_GRAMS);
   }
 }
 
@@ -98,6 +163,9 @@ void connectMqttIfNeeded() {
   if (mqttClient.connect(MQTT_CLIENT_ID, MQTT_USERNAME, MQTT_PASSWORD)) {
     Serial.println(F("conectado."));
     mqttClient.subscribe(TOPIC_TEST_COMMAND, 1);
+    mqttClient.subscribe(TOPIC_IRRIGATION_COMMAND, 1);
+    mqttClient.subscribe(TOPIC_WATER_COMMAND, 1);
+    mqttClient.subscribe(TOPIC_FEEDING_COMMAND, 1);
     mqttClient.publish(TOPIC_STATUS, "online", true, 1);
   } else {
     Serial.print(F("falhou. Erro de rede="));
@@ -114,6 +182,16 @@ void publishPendingTestResponse() {
 
   testResponsePending = false;
   mqttClient.publish(TOPIC_TEST_RESPONSE, "mega recebeu o comando", false, 1);
+}
+
+void publishPendingAutomationResponse() {
+  if (!automationResponsePending || !mqttClient.connected()) {
+    return;
+  }
+
+  automationResponsePending = false;
+  mqttClient.publish(TOPIC_AUTOMATION_RESPONSE, automationResponsePayload, false, 1);
+  automationResponsePayload = "";
 }
 
 void publishHeartbeatIfDue() {
@@ -152,6 +230,7 @@ void loop() {
 
   connectMqttIfNeeded();
   publishPendingTestResponse();
+  publishPendingAutomationResponse();
   publishHeartbeatIfDue();
 }
 

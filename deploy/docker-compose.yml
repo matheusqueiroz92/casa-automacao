@@ -1,24 +1,6 @@
 name: casa-automacao
 
 services:
-  postgres:
-    image: postgres:17.12-alpine3.24
-    restart: unless-stopped
-    environment:
-      POSTGRES_DB: ${POSTGRES_DB}
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-    volumes:
-      - postgres-data:/var/lib/postgresql/data
-      - ./postgres/init.sql:/docker-entrypoint-initdb.d/001-init.sql:ro
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    networks:
-      - internal
-
   mqtt:
     image: eclipse-mosquitto:2.1.4-alpine
     restart: unless-stopped
@@ -39,24 +21,23 @@ services:
 
   api:
     build:
-      context: ../services/api
+      context: ..
+      dockerfile: apps/api/Dockerfile
     restart: unless-stopped
     environment:
       NODE_ENV: production
       HOST: 0.0.0.0
       PORT: 3000
-      API_KEY: ${API_KEY}
-      DB_HOST: postgres
-      DB_PORT: 5432
-      DB_NAME: ${POSTGRES_DB}
-      DB_USER: ${POSTGRES_USER}
-      DB_PASSWORD: ${POSTGRES_PASSWORD}
+      DATABASE_URL: ${DATABASE_URL}
+      DB_MAX_CONNECTIONS: 5
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET}
+      BETTER_AUTH_URL: ${BETTER_AUTH_URL}
+      AUTH_TRUSTED_ORIGINS: ${AUTH_TRUSTED_ORIGINS}
       MQTT_URL: mqtt://mqtt:1883
       MQTT_USERNAME: ${MQTT_API_USERNAME}
       MQTT_PASSWORD: ${MQTT_API_PASSWORD}
+    command: ["sh", "-c", "npm run db:migrate:prod --workspace @casa/api && npm run start --workspace @casa/api"]
     depends_on:
-      postgres:
-        condition: service_healthy
       mqtt:
         condition: service_started
     healthcheck:
@@ -76,7 +57,6 @@ services:
       traefik.http.services.casa-api.loadbalancer.server.port: "3000"
 
 volumes:
-  postgres-data:
   mosquitto-data:
 
 networks:

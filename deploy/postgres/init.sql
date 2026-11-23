@@ -20,7 +20,7 @@ create table if not exists commands (
   device_id text not null,
   command_type text not null,
   payload jsonb not null,
-  status text not null check (status in ('created', 'published', 'acknowledged', 'failed', 'expired')),
+  status text not null check (status in ('created', 'published', 'executing', 'completed', 'failed', 'expired')),
   error_message text,
   created_at timestamptz not null default now(),
   published_at timestamptz,

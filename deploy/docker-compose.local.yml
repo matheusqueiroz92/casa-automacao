@@ -8,6 +8,8 @@ services:
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - "127.0.0.1:5433:5432"
     volumes:
       - postgres-local-data:/var/lib/postgresql/data
       - ./postgres/init.sql:/docker-entrypoint-initdb.d/001-init.sql:ro
@@ -32,7 +34,8 @@ services:
 
   api:
     build:
-      context: ../services/api
+      context: ..
+      dockerfile: apps/api/Dockerfile
     restart: unless-stopped
     ports:
       - "127.0.0.1:3000:3000"
@@ -40,7 +43,9 @@ services:
       NODE_ENV: development
       HOST: 0.0.0.0
       PORT: 3000
-      API_KEY: ${API_KEY}
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET}
+      BETTER_AUTH_URL: http://127.0.0.1:3000
+      AUTH_TRUSTED_ORIGINS: ${AUTH_TRUSTED_ORIGINS}
       DB_HOST: postgres
       DB_PORT: 5432
       DB_NAME: ${POSTGRES_DB}
@@ -54,6 +59,7 @@ services:
         condition: service_healthy
       mqtt:
         condition: service_started
+    command: ["sh", "-c", "npm run db:migrate:prod --workspace @casa/api && npm run start --workspace @casa/api"]
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/health/ready').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
       interval: 10s

@@ -4,8 +4,11 @@ Este stack e isolado dos outros projetos da VPS. Ele nao publica portas diretame
 
 - API: roteada pelo Traefik para `casa-api.matheusqueiroz.dev.br`;
 - MQTT: roteado com TLS/SNI pelo Traefik para `casa-mqtt.matheusqueiroz.dev.br`;
-- PostgreSQL: acessivel apenas na rede Docker interna;
+- PostgreSQL: Neon gerenciado, acessado pela API usando TLS;
 - Mosquitto interno: acessivel apenas pela API e pelo Traefik.
+
+A imagem da API usa a raiz do monorepo como contexto para incluir
+`apps/api` e os contratos compartilhados em `packages/contracts`.
 
 ## Segredos que nao devem ser versionados
 
@@ -13,7 +16,13 @@ Este stack e isolado dos outros projetos da VPS. Ele nao publica portas diretame
 - `mosquitto/config/passwords`.
 
 Copie `.env.example` para `.env` e substitua todos os valores de exemplo por
-segredos diferentes. As senhas do PostgreSQL, MQTT e API devem ser independentes.
+segredos diferentes. As senhas do Neon, MQTT e o segredo do Better Auth devem
+ser independentes.
+
+Em producao, use a connection string pooled fornecida pelo Neon em
+`DATABASE_URL`, com `sslmode=require`. Defina `BETTER_AUTH_URL` como
+`https://casa-api.matheusqueiroz.dev.br` e limite `AUTH_TRUSTED_ORIGINS` aos
+enderecos reais do aplicativo e do frontend web.
 
 O arquivo `passwords` do Mosquitto deve conter dois usuarios:
 
@@ -36,18 +45,25 @@ O arquivo `docker-compose.local.yml` publica somente no loopback do computador:
 
 - API: `127.0.0.1:3000`;
 - MQTT: `127.0.0.1:1883`;
-- PostgreSQL: nao e publicado no host.
+- PostgreSQL: `127.0.0.1:5433`, usado pela API em hot reload executada no host.
 
 Ele nao depende do Traefik e usa volumes diferentes dos volumes de producao.
 
-Ao testar o comando de diagnostico com PowerShell, envie um objeto JSON vazio:
+As rotas da casa exigem uma sessao Better Auth. Faca login pelo aplicativo; a
+chave `x-api-key` nao e mais aceita.
+
+## Ponte da Raspberry
+
+Depois que o broker externo estiver publicado e com TLS valido, use os modelos
+em `raspberry/` para configurar a conexao iniciada pela rede residencial. O
+arquivo real `bridge-vps.conf` nao deve ser versionado: ele contem a senha do
+usuario remoto `gateway-casa` e uma senha separada para o usuario local
+`bridge-casa`.
+
+Para preparar o banco local e criar o primeiro administrador:
 
 ```powershell
-Invoke-RestMethod `
-  -Method Post `
-  -Uri http://localhost:3000/v1/devices/mega/commands/test `
-  -Headers @{ "x-api-key" = $ApiKey } `
-  -ContentType "application/json" `
-  -Body "{}"
+npm run db:migrate --workspace @casa/api
+npm run auth:create-admin --workspace @casa/api -- --email seu-email@exemplo.com --name "Matheus Queiroz" --role admin
 ```
 

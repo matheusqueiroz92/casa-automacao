@@ -1,0 +1,37 @@
+# Copie para /etc/mosquitto/conf.d/bridge-vps.conf na Raspberry Pi.
+# O arquivo real contem segredos e deve usar root:mosquitto e permissao 0640.
+
+connection casa-vps
+address casa-mqtt.matheusqueiroz.dev.br:443
+
+# Credenciais locais: limitam o que a ponte pode fazer no broker da Raspberry.
+local_clientid bridge-casa-local
+local_username bridge-casa
+local_password SUBSTITUA_PELA_SENHA_LOCAL_DA_PONTE
+
+# Credenciais remotas: correspondem ao usuario gateway-casa da VPS.
+remote_clientid gateway-casa-raspberry
+remote_username gateway-casa
+remote_password SUBSTITUA_PELA_SENHA_GATEWAY_DA_VPS
+
+bridge_protocol_version mqttv311
+try_private false
+cleansession false
+start_type automatic
+restart_timeout 10 60
+keepalive_interval 30
+notifications_local_only true
+notification_topic casa/gateway/ponte/status
+
+# TLS termina no Traefik da VPS; o certificado e o hostname sao verificados.
+bridge_cafile /etc/ssl/certs/ca-certificates.crt
+bridge_tls_version tlsv1.2
+bridge_insecure false
+
+# VPS -> Raspberry -> Mega.
+topic casa/mega/comando/# in 1
+
+# Mega -> Raspberry -> VPS/API.
+topic casa/mega/status out 1
+topic casa/mega/evento/# out 1
+topic casa/mega/telemetria/# out 1
