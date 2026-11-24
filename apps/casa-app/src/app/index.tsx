@@ -70,10 +70,24 @@ const quickActions: QuickAction[] = [
   },
   {
     id: 'rele',
-    title: 'Relé de bancada',
-    description: 'Testar o módulo sem carga conectada',
+    title: 'Relé simples',
+    description: 'Testar o módulo de um canal sem carga',
     meta: `Pulso: ${AUTOMATION_LIMITS.relay_test.defaultDurationSeconds} s · limite: ${AUTOMATION_LIMITS.relay_test.maxDurationSeconds} s`,
     icon: 'zap',
+  },
+  {
+    id: 'releDuplo1',
+    title: 'Módulo duplo · canal 1',
+    description: 'Testar IN1 sem carga conectada',
+    meta: `Pulso: ${AUTOMATION_LIMITS.relay_test.defaultDurationSeconds} s · ativo em LOW`,
+    icon: 'toggle-left',
+  },
+  {
+    id: 'releDuplo2',
+    title: 'Módulo duplo · canal 2',
+    description: 'Testar IN2 sem carga conectada',
+    meta: `Pulso: ${AUTOMATION_LIMITS.relay_test.defaultDurationSeconds} s · ativo em LOW`,
+    icon: 'toggle-right',
   },
 ];
 
@@ -117,6 +131,19 @@ function automationCommandFor(actionId: ActionId): AutomationCommand {
     case 'rele':
       return {
         type: 'relay_test',
+        channel: 1,
+        durationSeconds: AUTOMATION_LIMITS.relay_test.defaultDurationSeconds,
+      };
+    case 'releDuplo1':
+      return {
+        type: 'relay_test',
+        channel: 2,
+        durationSeconds: AUTOMATION_LIMITS.relay_test.defaultDurationSeconds,
+      };
+    case 'releDuplo2':
+      return {
+        type: 'relay_test',
+        channel: 3,
         durationSeconds: AUTOMATION_LIMITS.relay_test.defaultDurationSeconds,
       };
   }

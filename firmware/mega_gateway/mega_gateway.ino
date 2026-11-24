@@ -7,11 +7,23 @@
 const uint8_t PIN_SD_CS = 4;
 const uint8_t PIN_ETHERNET_CS = 10;
 const uint8_t MEGA_SPI_SS_PIN = 53;
-const uint8_t RELAY_TEST_PIN = 22;
 
-// O modulo RoboCore v2.1 e acionado em nivel alto.
-const uint8_t RELAY_TEST_ON_LEVEL = HIGH;
-const uint8_t RELAY_TEST_OFF_LEVEL = LOW;
+struct RelayTestChannel {
+  uint8_t pin;
+  uint8_t onLevel;
+  uint8_t offLevel;
+  const char *detail;
+};
+
+// Canal 1: modulo RoboCore v2.1 ativo em nivel alto.
+// Canais 2 e 3: modulo BTE13-003 ativo em nivel baixo.
+const RelayTestChannel RELAY_TEST_CHANNELS[] = {
+  {22, HIGH, LOW, "relay_test_1"},
+  {23, LOW, HIGH, "relay_test_2"},
+  {24, LOW, HIGH, "relay_test_3"},
+};
+const uint8_t RELAY_TEST_CHANNEL_COUNT =
+    sizeof(RELAY_TEST_CHANNELS) / sizeof(RELAY_TEST_CHANNELS[0]);
 
 // MAC localmente administrado e exclusivo desta instalacao.
 byte ethernetMac[] = {0x02, 0x4D, 0x45, 0x47, 0x41, 0x01};
@@ -27,6 +39,8 @@ const char TOPIC_IRRIGATION_COMMAND[] = "casa/mega/comando/irrigacao";
 const char TOPIC_WATER_COMMAND[] = "casa/mega/comando/agua";
 const char TOPIC_FEEDING_COMMAND[] = "casa/mega/comando/racao";
 const char TOPIC_RELAY_TEST_COMMAND[] = "casa/mega/comando/rele/1";
+const char TOPIC_RELAY_TEST_2_COMMAND[] = "casa/mega/comando/rele/2";
+const char TOPIC_RELAY_TEST_3_COMMAND[] = "casa/mega/comando/rele/3";
 const char TOPIC_AUTOMATION_RESPONSE[] = "casa/mega/evento/comando";
 const char TOPIC_UPTIME[] = "casa/mega/telemetria/uptime";
 
@@ -53,7 +67,7 @@ bool networkReady = false;
 bool testResponsePending = false;
 bool automationResponsePending = false;
 String automationResponsePayload;
-bool relayTestActive = false;
+int8_t activeRelayTestChannel = -1;
 unsigned long relayTestDeadlineMs = 0;
 String relayTestCommandId;
 unsigned long lastEthernetAttemptMs = 0;
@@ -113,7 +127,12 @@ void queueRelayTestResponse(const String &commandId, const char *status, const c
   automationResponsePending = true;
 }
 
-void startRelayTest(const String &payload) {
+void startRelayTest(const String &payload, uint8_t channelIndex) {
+  if (channelIndex >= RELAY_TEST_CHANNEL_COUNT) {
+    queueRelayTestResponse("unknown", "rejected", "invalid_channel");
+    return;
+  }
+
   const int separatorIndex = payload.indexOf('|');
   if (separatorIndex <= 0) {
     queueRelayTestResponse("unknown", "rejected", "invalid_payload");
@@ -134,24 +153,27 @@ void startRelayTest(const String &payload) {
     return;
   }
 
-  if (relayTestActive) {
+  if (activeRelayTestChannel >= 0) {
     queueRelayTestResponse(commandId, "rejected", "relay_busy");
     return;
   }
 
+  const RelayTestChannel &channel = RELAY_TEST_CHANNELS[channelIndex];
   relayTestCommandId = commandId;
   relayTestDeadlineMs = millis() + (durationSeconds * 1000UL);
-  relayTestActive = true;
-  digitalWrite(RELAY_TEST_PIN, RELAY_TEST_ON_LEVEL);
+  activeRelayTestChannel = channelIndex;
+  digitalWrite(channel.pin, channel.onLevel);
 
-  Serial.print(F("Rele de teste acionado por "));
+  Serial.print(F("Rele de teste "));
+  Serial.print(channelIndex + 1);
+  Serial.print(F(" acionado por "));
   Serial.print(durationSeconds);
   Serial.println(F(" segundo(s)."));
-  queueRelayTestResponse(commandId, "executing", "relay_test");
+  queueRelayTestResponse(commandId, "executing", channel.detail);
 }
 
 void updateRelayTest() {
-  if (!relayTestActive) {
+  if (activeRelayTestChannel < 0) {
     return;
   }
 
@@ -160,11 +182,15 @@ void updateRelayTest() {
     return;
   }
 
-  digitalWrite(RELAY_TEST_PIN, RELAY_TEST_OFF_LEVEL);
-  relayTestActive = false;
+  const uint8_t channelIndex = (uint8_t)activeRelayTestChannel;
+  const RelayTestChannel &channel = RELAY_TEST_CHANNELS[channelIndex];
+  digitalWrite(channel.pin, channel.offLevel);
+  activeRelayTestChannel = -1;
 
-  Serial.println(F("Rele de teste desligado automaticamente."));
-  queueRelayTestResponse(relayTestCommandId, "completed", "relay_test");
+  Serial.print(F("Rele de teste "));
+  Serial.print(channelIndex + 1);
+  Serial.println(F(" desligado automaticamente."));
+  queueRelayTestResponse(relayTestCommandId, "completed", channel.detail);
   relayTestCommandId = "";
 }
 
@@ -184,7 +210,11 @@ void onMqttMessage(String &topic, String &payload) {
   } else if (topic == TOPIC_FEEDING_COMMAND) {
     queueAutomationResponse(payload, MAX_FEEDING_GRAMS);
   } else if (topic == TOPIC_RELAY_TEST_COMMAND) {
-    startRelayTest(payload);
+    startRelayTest(payload, 0);
+  } else if (topic == TOPIC_RELAY_TEST_2_COMMAND) {
+    startRelayTest(payload, 1);
+  } else if (topic == TOPIC_RELAY_TEST_3_COMMAND) {
+    startRelayTest(payload, 2);
   }
 }
 
@@ -282,6 +312,8 @@ void connectMqttIfNeeded() {
     mqttClient.subscribe(TOPIC_WATER_COMMAND, 1);
     mqttClient.subscribe(TOPIC_FEEDING_COMMAND, 1);
     mqttClient.subscribe(TOPIC_RELAY_TEST_COMMAND, 1);
+    mqttClient.subscribe(TOPIC_RELAY_TEST_2_COMMAND, 1);
+    mqttClient.subscribe(TOPIC_RELAY_TEST_3_COMMAND, 1);
     mqttClient.publish(TOPIC_STATUS, "online", true, 1);
   } else {
     Serial.print(F("falhou. Erro de rede="));
@@ -327,9 +359,12 @@ void publishHeartbeatIfDue() {
 }
 
 void setup() {
-  // Garante que o modulo v2.1 nunca seja energizado durante o boot.
-  digitalWrite(RELAY_TEST_PIN, RELAY_TEST_OFF_LEVEL);
-  pinMode(RELAY_TEST_PIN, OUTPUT);
+  // Define o nivel inativo antes de transformar os pinos em saida. Assim,
+  // nenhum dos modulos recebe um pulso acidental durante o boot do Mega.
+  for (uint8_t index = 0; index < RELAY_TEST_CHANNEL_COUNT; index++) {
+    digitalWrite(RELAY_TEST_CHANNELS[index].pin, RELAY_TEST_CHANNELS[index].offLevel);
+    pinMode(RELAY_TEST_CHANNELS[index].pin, OUTPUT);
+  }
 
   Serial.begin(115200);
   while (!Serial) {

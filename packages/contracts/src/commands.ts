@@ -53,6 +53,9 @@ export const AutomationCommandRequestSchema = Type.Union([
   Type.Object(
     {
       type: Type.Literal('relay_test'),
+      channel: Type.Optional(
+        Type.Union([Type.Literal(1), Type.Literal(2), Type.Literal(3)]),
+      ),
       durationSeconds: Type.Integer({
         minimum: 1,
         maximum: AUTOMATION_LIMITS.relay_test.maxDurationSeconds,

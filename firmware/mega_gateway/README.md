@@ -2,10 +2,32 @@
 
 Este sketch valida a comunicacao entre o Arduino Mega, o Ethernet Shield W5100 e o
 Mosquitto local. Ele tambem valida o protocolo dos comandos de irrigacao, agua e
-racao, mas ainda nao controla relés, bombas, valvulas ou alimentadores.
+racao e permite pulsos limitados em tres canais de rele de bancada.
 
 `ACTUATORS_CONFIGURED` permanece `false`. Os comandos validos recebem a resposta
-`rejected|hardware_unconfigured`, e nenhum pino de saida e configurado ou acionado.
+`rejected|hardware_unconfigured`. Somente os topicos de teste de rele podem acionar
+saidas; bombas, valvulas e alimentadores continuam bloqueados.
+
+## Reles de bancada
+
+Os bornes de potencia devem permanecer vazios durante estes testes.
+
+| Canal | Modulo | Pino Mega | Topico | Nivel ativo | Nivel inativo |
+| --- | --- | ---: | --- | --- | --- |
+| 1 | RoboCore v2.1 | 22 | `casa/mega/comando/rele/1` | `HIGH` | `LOW` |
+| 2 | BTE13-003 IN1 | 23 | `casa/mega/comando/rele/2` | `LOW` | `HIGH` |
+| 3 | BTE13-003 IN2 | 24 | `casa/mega/comando/rele/3` | `LOW` | `HIGH` |
+
+O firmware inicializa os tres pinos no nivel inativo antes de configura-los como
+saida. Um intertravamento permite somente um rele de bancada ativo por vez. Cada
+pulso dura no maximo cinco segundos, mesmo que a API ou o aplicativo solicitem mais.
+
+No BTE13-003, mantenha o jumper `VCC/RVCC` instalado e conecte:
+
+- `GND` ao `GND` do Mega;
+- `IN1` ao pino 23;
+- `IN2` ao pino 24;
+- `VCC` aos 5 V do Mega.
 
 ## Bibliotecas
 
@@ -71,6 +93,7 @@ O payload usa o formato `commandId|valor`. Os limites gravados no Mega sao:
 - irrigacao: ate 45 segundos;
 - enchimento de agua: ate 30 segundos;
 - racao: ate 120 gramas.
+- rele de bancada: ate 5 segundos, com apenas um canal ativo por vez.
 
 Exemplo de teste dentro do limite:
 

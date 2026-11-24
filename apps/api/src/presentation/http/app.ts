@@ -88,6 +88,13 @@ function getHttpStatusCode(error: unknown): number {
 
 export function buildHttpApp(dependencies: HttpAppDependencies) {
   const app = Fastify({
+    ajv: {
+      customOptions: {
+        // Nao remova campos antes de avaliar todos os ramos dos contratos
+        // discriminados. Isso preserva `channel` nos comandos relay_test.
+        removeAdditional: false,
+      },
+    },
     logger: dependencies.logger ?? false,
     trustProxy: true,
     bodyLimit: 16 * 1024,

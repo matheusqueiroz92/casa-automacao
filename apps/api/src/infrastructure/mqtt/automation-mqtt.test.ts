@@ -26,4 +26,20 @@ describe('buildAutomationMqttMessage', () => {
       payload: 'relay-command-id|2',
     });
   });
+
+  it.each([
+    [2, 'casa/mega/comando/rele/2'],
+    [3, 'casa/mega/comando/rele/3'],
+  ] as const)('routes relay channel %s to its dedicated topic', (channel, topic) => {
+    expect(
+      buildAutomationMqttMessage('relay-command-id', {
+        type: 'relay_test',
+        channel,
+        durationSeconds: 2,
+      }),
+    ).toEqual({
+      topic,
+      payload: 'relay-command-id|2',
+    });
+  });
 });

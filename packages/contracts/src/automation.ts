@@ -21,7 +21,7 @@ export type AutomationCommand =
   | { type: 'irrigation'; durationSeconds: number }
   | { type: 'water_refill'; maxDurationSeconds: number }
   | { type: 'feeding'; grams: number }
-  | { type: 'relay_test'; durationSeconds: number };
+  | { type: 'relay_test'; channel?: 1 | 2 | 3; durationSeconds: number };
 
 export type AutomationCommandType = AutomationCommand['type'];
 
@@ -40,7 +40,11 @@ export function isAutomationCommandWithinLimits(command: AutomationCommand): boo
         command.grams >= 1 &&
         command.grams <= AUTOMATION_LIMITS.feeding.maxGrams;
     case 'relay_test':
-      return Number.isInteger(command.durationSeconds) &&
+      return (command.channel === undefined ||
+          command.channel === 1 ||
+          command.channel === 2 ||
+          command.channel === 3) &&
+        Number.isInteger(command.durationSeconds) &&
         command.durationSeconds >= 1 &&
         command.durationSeconds <= AUTOMATION_LIMITS.relay_test.maxDurationSeconds;
   }

@@ -177,6 +177,40 @@ describe('HTTP API', () => {
     await app.close();
   });
 
+  it('preserva o canal solicitado para um relé de bancada', async () => {
+    const { app, executeAutomation } = createApp(true);
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/v1/devices/mega/commands/automation',
+      headers: { cookie: 'casa.session_token=valid', 'content-type': 'application/json' },
+      payload: { type: 'relay_test', channel: 2, durationSeconds: 2 },
+    });
+
+    expect(response.statusCode).toBe(202);
+    expect(executeAutomation).toHaveBeenCalledWith({
+      type: 'relay_test',
+      channel: 2,
+      durationSeconds: 2,
+    });
+    await app.close();
+  });
+
+  it('rejeita campos desconhecidos em vez de remove-los silenciosamente', async () => {
+    const { app, executeAutomation } = createApp(true);
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/v1/devices/mega/commands/automation',
+      headers: { cookie: 'casa.session_token=valid', 'content-type': 'application/json' },
+      payload: { type: 'relay_test', channel: 2, durationSeconds: 2, unexpected: true },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(executeAutomation).not.toHaveBeenCalled();
+    await app.close();
+  });
+
   it('rejeita automação acima do limite antes do caso de uso', async () => {
     const { app, executeAutomation } = createApp(true);
 

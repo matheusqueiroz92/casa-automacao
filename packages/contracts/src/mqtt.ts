@@ -9,6 +9,8 @@ export const MQTT_TOPICS = {
       feeding: 'casa/mega/comando/racao',
       irrigation: 'casa/mega/comando/irrigacao',
       relayTest: 'casa/mega/comando/rele/1',
+      relayTest2: 'casa/mega/comando/rele/2',
+      relayTest3: 'casa/mega/comando/rele/3',
       test: 'casa/mega/comando/teste',
       waterRefill: 'casa/mega/comando/agua',
     },

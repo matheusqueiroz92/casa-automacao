@@ -16,6 +16,8 @@ describe('actionStatesReducer', () => {
       agua: 'running',
       racao: 'idle',
       rele: 'idle',
+      releDuplo1: 'idle',
+      releDuplo2: 'idle',
     });
   });
 
@@ -32,6 +34,8 @@ describe('actionStatesReducer', () => {
       agua: 'idle',
       racao: 'done',
       rele: 'idle',
+      releDuplo1: 'idle',
+      releDuplo2: 'idle',
     });
   });
 

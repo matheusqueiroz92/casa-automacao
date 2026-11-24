@@ -33,6 +33,8 @@ describe('contratos compartilhados', () => {
     expect(MQTT_TOPICS.mega.command.waterRefill).toBe('casa/mega/comando/agua');
     expect(MQTT_TOPICS.mega.command.feeding).toBe('casa/mega/comando/racao');
     expect(MQTT_TOPICS.mega.command.relayTest).toBe('casa/mega/comando/rele/1');
+    expect(MQTT_TOPICS.mega.command.relayTest2).toBe('casa/mega/comando/rele/2');
+    expect(MQTT_TOPICS.mega.command.relayTest3).toBe('casa/mega/comando/rele/3');
     expect(MQTT_TOPICS.mega.command.test).toBe('casa/mega/comando/teste');
     expect(MQTT_TOPICS.mega.status).toBe('casa/mega/status');
     expect(MQTT_TOPICS.mega.telemetry).toBe('casa/mega/telemetria/#');
@@ -55,6 +57,7 @@ describe('contratos compartilhados', () => {
     expect(
       isAutomationCommandWithinLimits({
         type: 'relay_test',
+        channel: 2,
         durationSeconds: AUTOMATION_LIMITS.relay_test.defaultDurationSeconds,
       }),
     ).toBe(true);
