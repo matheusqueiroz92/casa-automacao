@@ -1,43 +1,75 @@
 name: casa-automacao
 
+x-api-env: &api-env
+  NODE_ENV: production
+  HOST: 0.0.0.0
+  PORT: 3000
+  DATABASE_URL: ${DATABASE_URL:?defina DATABASE_URL}
+  DB_MAX_CONNECTIONS: ${DB_MAX_CONNECTIONS:-5}
+  BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?defina BETTER_AUTH_SECRET}
+  BETTER_AUTH_URL: ${BETTER_AUTH_URL:?defina BETTER_AUTH_URL}
+  AUTH_TRUSTED_ORIGINS: ${AUTH_TRUSTED_ORIGINS:?defina AUTH_TRUSTED_ORIGINS}
+  CORS_ORIGINS: ${CORS_ORIGINS:-}
+  MQTT_URL: mqtt://mqtt:1883
+  MQTT_USERNAME: ${MQTT_API_USERNAME:?defina MQTT_API_USERNAME}
+  MQTT_PASSWORD: ${MQTT_API_PASSWORD:?defina MQTT_API_PASSWORD}
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: 10m
+    max-file: "5"
+
 services:
   mqtt:
     image: eclipse-mosquitto:2.1.4-alpine
     restart: unless-stopped
     volumes:
-      - ./mosquitto/config:/mosquitto/config:ro
+      - ${MQTT_CONFIG_DIR:-./mosquitto/config}:/mosquitto/config:ro
       - mosquitto-data:/mosquitto/data
-    networks:
-      - internal
-      - traefik-public
+    networks: [internal, traefik]
+    logging: *logging
+    deploy:
+      resources:
+        limits:
+          memory: 128m
     labels:
-      traefik.enable: "true"
-      traefik.docker.network: traefik-public
-      traefik.tcp.routers.casa-mqtt.entrypoints: websecure
-      traefik.tcp.routers.casa-mqtt.rule: HostSNI(`casa-mqtt.matheusqueiroz.dev.br`)
-      traefik.tcp.routers.casa-mqtt.tls: "true"
-      traefik.tcp.routers.casa-mqtt.tls.certresolver: letsencrypt
-      traefik.tcp.services.casa-mqtt.loadbalancer.server.port: "1883"
+      - traefik.enable=true
+      - traefik.docker.network=${TRAEFIK_NETWORK:-traefik-public}
+      - traefik.tcp.routers.casa-mqtt.entrypoints=${TRAEFIK_ENTRYPOINT:-websecure}
+      - traefik.tcp.routers.casa-mqtt.rule=HostSNI(`${MQTT_DOMAIN:-casa-mqtt.matheusqueiroz.dev.br}`)
+      - traefik.tcp.routers.casa-mqtt.tls=true
+      - traefik.tcp.routers.casa-mqtt.tls.certresolver=${TRAEFIK_CERTRESOLVER:-letsencrypt}
+      - traefik.tcp.services.casa-mqtt.loadbalancer.server.port=1883
+
+  migrate:
+    image: casa-automacao-api:${CASA_TAG:-latest}
+    command: ["npm", "run", "db:migrate:prod", "--workspace", "@casa/api"]
+    restart: "no"
+    environment:
+      <<: *api-env
+    depends_on:
+      mqtt:
+        condition: service_started
+    networks: [internal]
+    logging: *logging
+    deploy:
+      resources:
+        limits:
+          memory: 384m
 
   api:
+    image: casa-automacao-api:${CASA_TAG:-latest}
     build:
-      context: ..
+      context: ${APP_SOURCE_DIR:-..}
       dockerfile: apps/api/Dockerfile
     restart: unless-stopped
     environment:
-      NODE_ENV: production
-      HOST: 0.0.0.0
-      PORT: 3000
-      DATABASE_URL: ${DATABASE_URL}
-      DB_MAX_CONNECTIONS: 5
-      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET}
-      BETTER_AUTH_URL: ${BETTER_AUTH_URL}
-      AUTH_TRUSTED_ORIGINS: ${AUTH_TRUSTED_ORIGINS}
-      MQTT_URL: mqtt://mqtt:1883
-      MQTT_USERNAME: ${MQTT_API_USERNAME}
-      MQTT_PASSWORD: ${MQTT_API_PASSWORD}
-    command: ["sh", "-c", "npm run db:migrate:prod --workspace @casa/api && npm run start --workspace @casa/api"]
+      <<: *api-env
+    command: ["npm", "run", "start", "--workspace", "@casa/api"]
     depends_on:
+      migrate:
+        condition: service_completed_successfully
       mqtt:
         condition: service_started
     healthcheck:
@@ -45,23 +77,26 @@ services:
       interval: 15s
       timeout: 5s
       retries: 5
-    networks:
-      - internal
-      - traefik-public
+    networks: [internal, traefik]
+    logging: *logging
+    deploy:
+      resources:
+        limits:
+          memory: 384m
     labels:
-      traefik.enable: "true"
-      traefik.docker.network: traefik-public
-      traefik.http.routers.casa-api.entrypoints: websecure
-      traefik.http.routers.casa-api.rule: Host(`casa-api.matheusqueiroz.dev.br`)
-      traefik.http.routers.casa-api.tls.certresolver: letsencrypt
-      traefik.http.services.casa-api.loadbalancer.server.port: "3000"
+      - traefik.enable=true
+      - traefik.docker.network=${TRAEFIK_NETWORK:-traefik-public}
+      - traefik.http.routers.casa-api.entrypoints=${TRAEFIK_ENTRYPOINT:-websecure}
+      - traefik.http.routers.casa-api.rule=Host(`${API_DOMAIN:-casa-api.matheusqueiroz.dev.br}`)
+      - traefik.http.routers.casa-api.tls=true
+      - traefik.http.routers.casa-api.tls.certresolver=${TRAEFIK_CERTRESOLVER:-letsencrypt}
+      - traefik.http.services.casa-api.loadbalancer.server.port=3000
 
 volumes:
-  mosquitto-data:
+  mosquitto-data: {}
 
 networks:
-  internal:
-    internal: true
-  traefik-public:
+  internal: {}
+  traefik:
     external: true
-
+    name: ${TRAEFIK_NETWORK:-traefik-public}

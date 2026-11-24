@@ -7,6 +7,20 @@ Este stack e isolado dos outros projetos da VPS. Ele nao publica portas diretame
 - PostgreSQL: Neon gerenciado, acessado pela API usando TLS;
 - Mosquitto interno: acessivel apenas pela API e pelo Traefik.
 
+Na VPS, a implantacao segue a convencao existente:
+
+```text
+/var/www/casa-automacao/          codigo-fonte clonado do Git
+/opt/apps/casa-automacao/
+  docker-compose.yml              copia de deploy/docker-compose.yml
+  .env                            baseado em deploy/production.env.example
+  mosquitto/config/               configuracao e credenciais privadas do broker
+```
+
+O `.env` de producao define `APP_SOURCE_DIR=/var/www/casa-automacao`, permitindo
+que o Compose em `/opt/apps` construa a imagem a partir do monorepo. O servico
+`migrate` conclui as migracoes antes de liberar a inicializacao da API.
+
 A imagem da API usa a raiz do monorepo como contexto para incluir
 `apps/api` e os contratos compartilhados em `packages/contracts`.
 
