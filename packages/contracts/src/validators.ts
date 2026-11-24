@@ -31,7 +31,8 @@ export function isAutomationCommandAccepted(
     value.commandId.length > 0 &&
     (value.commandType === 'irrigation' ||
       value.commandType === 'water_refill' ||
-      value.commandType === 'feeding') &&
+      value.commandType === 'feeding' ||
+      value.commandType === 'relay_test') &&
     value.status === 'published' &&
     typeof value.expiresAt === 'string' &&
     value.expiresAt.length > 0

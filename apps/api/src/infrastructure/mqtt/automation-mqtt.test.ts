@@ -14,4 +14,16 @@ describe('buildAutomationMqttMessage', () => {
       payload: 'command-id|10',
     });
   });
+
+  it('routes the bounded bench relay pulse to its dedicated topic', () => {
+    expect(
+      buildAutomationMqttMessage('relay-command-id', {
+        type: 'relay_test',
+        durationSeconds: 2,
+      }),
+    ).toEqual({
+      topic: 'casa/mega/comando/rele/1',
+      payload: 'relay-command-id|2',
+    });
+  });
 });

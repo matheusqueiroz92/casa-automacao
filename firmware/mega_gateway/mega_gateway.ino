@@ -7,6 +7,11 @@
 const uint8_t PIN_SD_CS = 4;
 const uint8_t PIN_ETHERNET_CS = 10;
 const uint8_t MEGA_SPI_SS_PIN = 53;
+const uint8_t RELAY_TEST_PIN = 22;
+
+// O modulo RoboCore v2.1 e acionado em nivel alto.
+const uint8_t RELAY_TEST_ON_LEVEL = HIGH;
+const uint8_t RELAY_TEST_OFF_LEVEL = LOW;
 
 // MAC localmente administrado e exclusivo desta instalacao.
 byte ethernetMac[] = {0x02, 0x4D, 0x45, 0x47, 0x41, 0x01};
@@ -21,6 +26,7 @@ const char TOPIC_TEST_RESPONSE[] = "casa/mega/evento/teste";
 const char TOPIC_IRRIGATION_COMMAND[] = "casa/mega/comando/irrigacao";
 const char TOPIC_WATER_COMMAND[] = "casa/mega/comando/agua";
 const char TOPIC_FEEDING_COMMAND[] = "casa/mega/comando/racao";
+const char TOPIC_RELAY_TEST_COMMAND[] = "casa/mega/comando/rele/1";
 const char TOPIC_AUTOMATION_RESPONSE[] = "casa/mega/evento/comando";
 const char TOPIC_UPTIME[] = "casa/mega/telemetria/uptime";
 
@@ -29,11 +35,14 @@ const char TOPIC_UPTIME[] = "casa/mega/telemetria/uptime";
 const uint16_t MAX_IRRIGATION_SECONDS = 45;
 const uint16_t MAX_WATER_SECONDS = 30;
 const uint16_t MAX_FEEDING_GRAMS = 120;
+const uint16_t MAX_RELAY_TEST_SECONDS = 5;
 
-// Permanece falso ate que relés, sensores, pinos e fail-safes sejam definidos
-// e validados fisicamente. Este sketch nunca energiza uma saída.
+// Permanece falso ate que os atuadores definitivos, sensores e fail-safes
+// sejam validados. O unico acionamento permitido agora e o pulso de bancada
+// dedicado, limitado e sem carga nos bornes do rele.
 const bool ACTUATORS_CONFIGURED = false;
 
+const unsigned long ETHERNET_RETRY_INTERVAL_MS = 15000UL;
 const unsigned long MQTT_RECONNECT_INTERVAL_MS = 5000UL;
 const unsigned long HEARTBEAT_INTERVAL_MS = 30000UL;
 
@@ -44,6 +53,10 @@ bool networkReady = false;
 bool testResponsePending = false;
 bool automationResponsePending = false;
 String automationResponsePayload;
+bool relayTestActive = false;
+unsigned long relayTestDeadlineMs = 0;
+String relayTestCommandId;
+unsigned long lastEthernetAttemptMs = 0;
 unsigned long lastMqttAttemptMs = 0;
 unsigned long lastHeartbeatMs = 0;
 
@@ -95,13 +108,72 @@ void queueAutomationResponse(const String &payload, uint16_t maximumValue) {
   automationResponsePending = true;
 }
 
+void queueRelayTestResponse(const String &commandId, const char *status, const char *detail) {
+  automationResponsePayload = commandId + "|" + status + "|" + detail;
+  automationResponsePending = true;
+}
+
+void startRelayTest(const String &payload) {
+  const int separatorIndex = payload.indexOf('|');
+  if (separatorIndex <= 0) {
+    queueRelayTestResponse("unknown", "rejected", "invalid_payload");
+    return;
+  }
+
+  const String commandId = payload.substring(0, separatorIndex);
+  const String rawDurationSeconds = payload.substring(separatorIndex + 1);
+
+  if (!containsOnlyDigits(rawDurationSeconds)) {
+    queueRelayTestResponse(commandId, "rejected", "invalid_payload");
+    return;
+  }
+
+  const unsigned long durationSeconds = rawDurationSeconds.toInt();
+  if (durationSeconds < 1 || durationSeconds > MAX_RELAY_TEST_SECONDS) {
+    queueRelayTestResponse(commandId, "rejected", "safety_limit");
+    return;
+  }
+
+  if (relayTestActive) {
+    queueRelayTestResponse(commandId, "rejected", "relay_busy");
+    return;
+  }
+
+  relayTestCommandId = commandId;
+  relayTestDeadlineMs = millis() + (durationSeconds * 1000UL);
+  relayTestActive = true;
+  digitalWrite(RELAY_TEST_PIN, RELAY_TEST_ON_LEVEL);
+
+  Serial.print(F("Rele de teste acionado por "));
+  Serial.print(durationSeconds);
+  Serial.println(F(" segundo(s)."));
+  queueRelayTestResponse(commandId, "executing", "relay_test");
+}
+
+void updateRelayTest() {
+  if (!relayTestActive) {
+    return;
+  }
+
+  const unsigned long now = millis();
+  if ((long)(now - relayTestDeadlineMs) < 0) {
+    return;
+  }
+
+  digitalWrite(RELAY_TEST_PIN, RELAY_TEST_OFF_LEVEL);
+  relayTestActive = false;
+
+  Serial.println(F("Rele de teste desligado automaticamente."));
+  queueRelayTestResponse(relayTestCommandId, "completed", "relay_test");
+  relayTestCommandId = "";
+}
+
 void onMqttMessage(String &topic, String &payload) {
   Serial.print(F("MQTT recebido ["));
   Serial.print(topic);
   Serial.print(F("]: "));
   Serial.println(payload);
 
-  // Este firmware de diagnostico nunca aciona saidas.
   // A resposta sera publicada fora do callback para evitar bloqueios na biblioteca.
   if (topic == TOPIC_TEST_COMMAND) {
     testResponsePending = true;
@@ -111,6 +183,8 @@ void onMqttMessage(String &topic, String &payload) {
     queueAutomationResponse(payload, MAX_WATER_SECONDS);
   } else if (topic == TOPIC_FEEDING_COMMAND) {
     queueAutomationResponse(payload, MAX_FEEDING_GRAMS);
+  } else if (topic == TOPIC_RELAY_TEST_COMMAND) {
+    startRelayTest(payload);
   }
 }
 
@@ -141,6 +215,47 @@ bool startEthernet() {
   return true;
 }
 
+void maintainEthernetConnection() {
+  const unsigned long now = millis();
+
+  if (!networkReady) {
+    if (now - lastEthernetAttemptMs < ETHERNET_RETRY_INTERVAL_MS) {
+      return;
+    }
+
+    lastEthernetAttemptMs = now;
+    networkReady = startEthernet();
+
+    if (networkReady) {
+      Serial.println(F("Rede Ethernet recuperada."));
+
+      // Permite que o MQTT tente reconectar sem aguardar mais cinco segundos.
+      lastMqttAttemptMs = millis() - MQTT_RECONNECT_INTERVAL_MS;
+    }
+
+    return;
+  }
+
+  // Retornos da biblioteca Ethernet:
+  // 1 = falha ao renovar; 2 = renovacao concluida;
+  // 3 = falha ao refazer o vinculo; 4 = novo vinculo concluido.
+  const int dhcpResult = Ethernet.maintain();
+
+  if (dhcpResult == 1 || dhcpResult == 3) {
+    Serial.println(F("ERRO: lease DHCP perdido. Tentando recuperar a rede..."));
+
+    mqttClient.disconnect();
+    ethernetClient.stop();
+    networkReady = false;
+
+    // Agenda a proxima tentativa sem bloquear continuamente o loop principal.
+    lastEthernetAttemptMs = millis();
+  } else if (dhcpResult == 2 || dhcpResult == 4) {
+    Serial.println(F("Lease DHCP renovado."));
+    printIp("IP do Mega: ", Ethernet.localIP());
+  }
+}
+
 void configureMqtt() {
   mqttClient.begin(mqttBroker, MQTT_PORT, ethernetClient);
   mqttClient.onMessage(onMqttMessage);
@@ -166,6 +281,7 @@ void connectMqttIfNeeded() {
     mqttClient.subscribe(TOPIC_IRRIGATION_COMMAND, 1);
     mqttClient.subscribe(TOPIC_WATER_COMMAND, 1);
     mqttClient.subscribe(TOPIC_FEEDING_COMMAND, 1);
+    mqttClient.subscribe(TOPIC_RELAY_TEST_COMMAND, 1);
     mqttClient.publish(TOPIC_STATUS, "online", true, 1);
   } else {
     Serial.print(F("falhou. Erro de rede="));
@@ -211,6 +327,10 @@ void publishHeartbeatIfDue() {
 }
 
 void setup() {
+  // Garante que o modulo v2.1 nunca seja energizado durante o boot.
+  digitalWrite(RELAY_TEST_PIN, RELAY_TEST_OFF_LEVEL);
+  pinMode(RELAY_TEST_PIN, OUTPUT);
+
   Serial.begin(115200);
   while (!Serial) {
     ;
@@ -218,6 +338,7 @@ void setup() {
 
   Serial.println(F("\nMega gateway - diagnostico MQTT"));
   networkReady = startEthernet();
+  lastEthernetAttemptMs = millis();
   configureMqtt();
 
   // Permite a primeira tentativa imediatamente.
@@ -225,8 +346,13 @@ void setup() {
 }
 
 void loop() {
-  Ethernet.maintain();
-  mqttClient.loop();
+  // O desligamento do rele tem prioridade sobre manutencao de rede e MQTT.
+  updateRelayTest();
+  maintainEthernetConnection();
+
+  if (networkReady) {
+    mqttClient.loop();
+  }
 
   connectMqttIfNeeded();
   publishPendingTestResponse();

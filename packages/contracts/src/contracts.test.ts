@@ -32,6 +32,7 @@ describe('contratos compartilhados', () => {
     expect(MQTT_TOPICS.mega.command.irrigation).toBe('casa/mega/comando/irrigacao');
     expect(MQTT_TOPICS.mega.command.waterRefill).toBe('casa/mega/comando/agua');
     expect(MQTT_TOPICS.mega.command.feeding).toBe('casa/mega/comando/racao');
+    expect(MQTT_TOPICS.mega.command.relayTest).toBe('casa/mega/comando/rele/1');
     expect(MQTT_TOPICS.mega.command.test).toBe('casa/mega/comando/teste');
     expect(MQTT_TOPICS.mega.status).toBe('casa/mega/status');
     expect(MQTT_TOPICS.mega.telemetry).toBe('casa/mega/telemetria/#');
@@ -51,6 +52,18 @@ describe('contratos compartilhados', () => {
       }),
     ).toBe(false);
     expect(isAutomationCommandWithinLimits({ type: 'feeding', grams: 121 })).toBe(false);
+    expect(
+      isAutomationCommandWithinLimits({
+        type: 'relay_test',
+        durationSeconds: AUTOMATION_LIMITS.relay_test.defaultDurationSeconds,
+      }),
+    ).toBe(true);
+    expect(
+      isAutomationCommandWithinLimits({
+        type: 'relay_test',
+        durationSeconds: AUTOMATION_LIMITS.relay_test.maxDurationSeconds + 1,
+      }),
+    ).toBe(false);
   });
 
   it('aceita a resposta publicada de um comando diagnóstico', () => {

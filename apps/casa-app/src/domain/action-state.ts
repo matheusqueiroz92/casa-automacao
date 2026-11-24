@@ -1,4 +1,4 @@
-export type ActionId = 'irrigacao' | 'agua' | 'racao';
+export type ActionId = 'irrigacao' | 'agua' | 'racao' | 'rele';
 export type ActionState = 'idle' | 'running' | 'done' | 'error';
 export type ActionStates = Record<ActionId, ActionState>;
 
@@ -11,6 +11,7 @@ export const initialActionStates: ActionStates = {
   irrigacao: 'idle',
   agua: 'idle',
   racao: 'idle',
+  rele: 'idle',
 };
 
 export function actionStatesReducer(

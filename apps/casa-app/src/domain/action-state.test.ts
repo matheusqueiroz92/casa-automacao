@@ -15,6 +15,7 @@ describe('actionStatesReducer', () => {
       irrigacao: 'idle',
       agua: 'running',
       racao: 'idle',
+      rele: 'idle',
     });
   });
 
@@ -30,6 +31,7 @@ describe('actionStatesReducer', () => {
       irrigacao: 'idle',
       agua: 'idle',
       racao: 'done',
+      rele: 'idle',
     });
   });
 

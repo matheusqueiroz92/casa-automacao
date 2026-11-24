@@ -11,12 +11,17 @@ export const AUTOMATION_LIMITS = {
     defaultGrams: 60,
     maxGrams: 120,
   },
+  relay_test: {
+    defaultDurationSeconds: 2,
+    maxDurationSeconds: 5,
+  },
 } as const;
 
 export type AutomationCommand =
   | { type: 'irrigation'; durationSeconds: number }
   | { type: 'water_refill'; maxDurationSeconds: number }
-  | { type: 'feeding'; grams: number };
+  | { type: 'feeding'; grams: number }
+  | { type: 'relay_test'; durationSeconds: number };
 
 export type AutomationCommandType = AutomationCommand['type'];
 
@@ -34,6 +39,10 @@ export function isAutomationCommandWithinLimits(command: AutomationCommand): boo
       return Number.isInteger(command.grams) &&
         command.grams >= 1 &&
         command.grams <= AUTOMATION_LIMITS.feeding.maxGrams;
+    case 'relay_test':
+      return Number.isInteger(command.durationSeconds) &&
+        command.durationSeconds >= 1 &&
+        command.durationSeconds <= AUTOMATION_LIMITS.relay_test.maxDurationSeconds;
   }
 }
 
@@ -45,5 +54,7 @@ export function automationCommandValue(command: AutomationCommand): number {
       return command.maxDurationSeconds;
     case 'feeding':
       return command.grams;
+    case 'relay_test':
+      return command.durationSeconds;
   }
 }

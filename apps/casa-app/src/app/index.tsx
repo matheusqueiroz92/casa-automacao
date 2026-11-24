@@ -68,6 +68,13 @@ const quickActions: QuickAction[] = [
     meta: `Porção: ${AUTOMATION_LIMITS.feeding.defaultGrams} g · limite: ${AUTOMATION_LIMITS.feeding.maxGrams} g`,
     icon: 'package',
   },
+  {
+    id: 'rele',
+    title: 'Relé de bancada',
+    description: 'Testar o módulo sem carga conectada',
+    meta: `Pulso: ${AUTOMATION_LIMITS.relay_test.defaultDurationSeconds} s · limite: ${AUTOMATION_LIMITS.relay_test.maxDurationSeconds} s`,
+    icon: 'zap',
+  },
 ];
 
 const navItems: { label: string; icon: IconName }[] = [
@@ -107,6 +114,11 @@ function automationCommandFor(actionId: ActionId): AutomationCommand {
       };
     case 'racao':
       return { type: 'feeding', grams: AUTOMATION_LIMITS.feeding.defaultGrams };
+    case 'rele':
+      return {
+        type: 'relay_test',
+        durationSeconds: AUTOMATION_LIMITS.relay_test.defaultDurationSeconds,
+      };
   }
 }
 

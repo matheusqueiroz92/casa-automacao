@@ -50,6 +50,16 @@ export const AutomationCommandRequestSchema = Type.Union([
     },
     { additionalProperties: false },
   ),
+  Type.Object(
+    {
+      type: Type.Literal('relay_test'),
+      durationSeconds: Type.Integer({
+        minimum: 1,
+        maximum: AUTOMATION_LIMITS.relay_test.maxDurationSeconds,
+      }),
+    },
+    { additionalProperties: false },
+  ),
 ]);
 
 export const AutomationCommandAcceptedSchema = Type.Object(
@@ -59,6 +69,7 @@ export const AutomationCommandAcceptedSchema = Type.Object(
       Type.Literal('irrigation'),
       Type.Literal('water_refill'),
       Type.Literal('feeding'),
+      Type.Literal('relay_test'),
     ]),
     status: Type.Literal('published'),
     expiresAt: Type.String({ minLength: 1 }),

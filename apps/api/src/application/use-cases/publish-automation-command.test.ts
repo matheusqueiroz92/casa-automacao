@@ -66,6 +66,20 @@ describe('PublishAutomationCommand', () => {
     expect(dependencies.commandPublisher.publishAutomation).not.toHaveBeenCalled();
   });
 
+  it('persists and publishes a bounded relay test pulse', async () => {
+    const dependencies = createDependencies();
+    const useCase = new PublishAutomationCommand(dependencies);
+    const command = {
+      type: 'relay_test' as const,
+      durationSeconds: AUTOMATION_LIMITS.relay_test.defaultDurationSeconds,
+    };
+
+    const result = await useCase.execute(command);
+
+    expect(dependencies.commandPublisher.publishAutomation).toHaveBeenCalledWith(commandId, command);
+    expect(result).toMatchObject({ commandId, commandType: 'relay_test', status: 'published' });
+  });
+
   it('records MQTT publication failures', async () => {
     const dependencies = createDependencies();
     vi.mocked(dependencies.commandPublisher.publishAutomation).mockRejectedValue(
