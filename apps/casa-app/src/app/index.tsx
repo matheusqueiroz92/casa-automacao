@@ -757,6 +757,28 @@ export default function DashboardScreen() {
                   statusColor={colors.warning}
                   value="Local somente"
                 />
+                <SystemCard
+                  detail={formatLastContact(gateway.presence.lastChange)}
+                  icon="eye"
+                  label="Sensor PIR"
+                  statusColor={
+                    gateway.presence.status === 'clear'
+                      ? colors.success
+                      : gateway.presence.status === 'detected' ||
+                          gateway.presence.status === 'warming_up'
+                        ? colors.warning
+                        : colors.textSubtle
+                  }
+                  value={
+                    gateway.presence.status === 'detected'
+                      ? 'Presença detectada'
+                      : gateway.presence.status === 'clear'
+                        ? 'Sem movimento'
+                        : gateway.presence.status === 'warming_up'
+                          ? 'Calibrando'
+                          : 'Sem leitura'
+                  }
+                />
               </View>
 
               <View style={styles.sectionHeading}>

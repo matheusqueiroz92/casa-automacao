@@ -7,6 +7,7 @@
 const uint8_t PIN_SD_CS = 4;
 const uint8_t PIN_ETHERNET_CS = 10;
 const uint8_t MEGA_SPI_SS_PIN = 53;
+const uint8_t PIR_PIN = 25;
 
 struct RelayTestChannel {
   uint8_t pin;
@@ -43,6 +44,7 @@ const char TOPIC_RELAY_TEST_2_COMMAND[] = "casa/mega/comando/rele/2";
 const char TOPIC_RELAY_TEST_3_COMMAND[] = "casa/mega/comando/rele/3";
 const char TOPIC_AUTOMATION_RESPONSE[] = "casa/mega/evento/comando";
 const char TOPIC_UPTIME[] = "casa/mega/telemetria/uptime";
+const char TOPIC_PRESENCE[] = "casa/mega/telemetria/presenca";
 
 // Limites soberanos do firmware. A API e o app usam os mesmos valores,
 // mas somente estas constantes determinam o que o Mega aceitaria executar.
@@ -59,6 +61,8 @@ const bool ACTUATORS_CONFIGURED = false;
 const unsigned long ETHERNET_RETRY_INTERVAL_MS = 15000UL;
 const unsigned long MQTT_RECONNECT_INTERVAL_MS = 5000UL;
 const unsigned long HEARTBEAT_INTERVAL_MS = 30000UL;
+const unsigned long PIR_WARMUP_MS = 60000UL;
+const unsigned long PIR_DEBOUNCE_MS = 250UL;
 
 EthernetClient ethernetClient;
 MQTTClient mqttClient(256);
@@ -73,10 +77,53 @@ String relayTestCommandId;
 unsigned long lastEthernetAttemptMs = 0;
 unsigned long lastMqttAttemptMs = 0;
 unsigned long lastHeartbeatMs = 0;
+bool pirReady = false;
+bool pirStatePublishPending = false;
+uint8_t pirStableState = LOW;
+uint8_t pirCandidateState = LOW;
+unsigned long pirWarmupStartedMs = 0;
+unsigned long pirCandidateSinceMs = 0;
 
 void printIp(const char *label, IPAddress address) {
   Serial.print(label);
   Serial.println(address);
+}
+
+void updatePirSensor() {
+  const unsigned long now = millis();
+
+  if (!pirReady) {
+    if (now - pirWarmupStartedMs < PIR_WARMUP_MS) {
+      return;
+    }
+
+    pirStableState = digitalRead(PIR_PIN);
+    pirCandidateState = pirStableState;
+    pirCandidateSinceMs = now;
+    pirReady = true;
+    pirStatePublishPending = true;
+
+    Serial.print(F("PIR estabilizado: "));
+    Serial.println(pirStableState == HIGH ? F("presenca detectada") : F("sem movimento"));
+    return;
+  }
+
+  const uint8_t currentState = digitalRead(PIR_PIN);
+  if (currentState != pirCandidateState) {
+    pirCandidateState = currentState;
+    pirCandidateSinceMs = now;
+    return;
+  }
+
+  if (currentState == pirStableState || now - pirCandidateSinceMs < PIR_DEBOUNCE_MS) {
+    return;
+  }
+
+  pirStableState = currentState;
+  pirStatePublishPending = true;
+
+  Serial.print(F("PIR: "));
+  Serial.println(pirStableState == HIGH ? F("presenca detectada") : F("ambiente sem movimento"));
 }
 
 bool containsOnlyDigits(const String &value) {
@@ -315,6 +362,12 @@ void connectMqttIfNeeded() {
     mqttClient.subscribe(TOPIC_RELAY_TEST_2_COMMAND, 1);
     mqttClient.subscribe(TOPIC_RELAY_TEST_3_COMMAND, 1);
     mqttClient.publish(TOPIC_STATUS, "online", true, 1);
+
+    if (pirReady) {
+      pirStatePublishPending = true;
+    } else {
+      mqttClient.publish(TOPIC_PRESENCE, "warming_up", true, 1);
+    }
   } else {
     Serial.print(F("falhou. Erro de rede="));
     Serial.print((int)mqttClient.lastError());
@@ -358,6 +411,19 @@ void publishHeartbeatIfDue() {
   mqttClient.publish(TOPIC_UPTIME, uptimeSeconds, false, 0);
 }
 
+void publishPendingPirState() {
+  if (!pirReady || !pirStatePublishPending || !mqttClient.connected()) {
+    return;
+  }
+
+  pirStatePublishPending = false;
+  mqttClient.publish(
+      TOPIC_PRESENCE,
+      pirStableState == HIGH ? "detected" : "clear",
+      true,
+      1);
+}
+
 void setup() {
   // Define o nivel inativo antes de transformar os pinos em saida. Assim,
   // nenhum dos modulos recebe um pulso acidental durante o boot do Mega.
@@ -366,12 +432,16 @@ void setup() {
     pinMode(RELAY_TEST_CHANNELS[index].pin, OUTPUT);
   }
 
+  pinMode(PIR_PIN, INPUT);
+  pirWarmupStartedMs = millis();
+
   Serial.begin(115200);
   while (!Serial) {
     ;
   }
 
   Serial.println(F("\nMega gateway - diagnostico MQTT"));
+  Serial.println(F("PIR em estabilizacao por 60 segundos."));
   networkReady = startEthernet();
   lastEthernetAttemptMs = millis();
   configureMqtt();
@@ -383,6 +453,7 @@ void setup() {
 void loop() {
   // O desligamento do rele tem prioridade sobre manutencao de rede e MQTT.
   updateRelayTest();
+  updatePirSensor();
   maintainEthernetConnection();
 
   if (networkReady) {
@@ -393,5 +464,5 @@ void loop() {
   publishPendingTestResponse();
   publishPendingAutomationResponse();
   publishHeartbeatIfDue();
+  publishPendingPirState();
 }
-

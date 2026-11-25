@@ -29,6 +29,19 @@ No BTE13-003, mantenha o jumper `VCC/RVCC` instalado e conecte:
 - `IN2` ao pino 24;
 - `VCC` aos 5 V do Mega.
 
+## Sensor PIR
+
+O sensor PIR usa o pino digital 25 do Mega:
+
+- `VCC` aos 5 V do Mega;
+- `OUT` ao pino 25;
+- `GND` ao `GND` do Mega.
+
+Durante os primeiros 60 segundos o firmware ignora leituras e publica
+`warming_up` em `casa/mega/telemetria/presenca`. Depois da estabilizacao, publica
+`detected` ou `clear` com retencao e QoS 1. Uma mudanca precisa permanecer estavel
+por 250 ms. A leitura do PIR nao aciona relés ou outros atuadores.
+
 ## Bibliotecas
 
 Use a biblioteca `Ethernet` que acompanha o Arduino IDE. Ela suporta o W5100 original.

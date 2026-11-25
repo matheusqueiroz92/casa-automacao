@@ -48,6 +48,31 @@ describe('useDashboardGateway', () => {
 
     await waitFor(() => expect(result.current.connection.status).toBe('online'));
     expect(result.current.connection.lastContact).toBe('2026-11-22T10:39:09.427Z');
+    expect(result.current.presence.status).toBe('unknown');
+  });
+
+  it('loads the latest PIR presence state', async () => {
+    const api = createApi({
+      getMegaState: jest.fn().mockResolvedValue({
+        device: 'mega',
+        state: [
+          {
+            topic: 'casa/mega/status',
+            payload: 'online',
+            receivedAt: '2026-11-25T10:00:00.000Z',
+          },
+          {
+            topic: 'casa/mega/telemetria/presenca',
+            payload: 'detected',
+            receivedAt: '2026-11-25T10:00:05.000Z',
+          },
+        ],
+      }),
+    });
+    const { result } = await renderHook(() => useDashboardGateway(api));
+
+    await waitFor(() => expect(result.current.presence.status).toBe('detected'));
+    expect(result.current.presence.lastChange).toBe('2026-11-25T10:00:05.000Z');
   });
 
   it('publishes a diagnostic command and reports success', async () => {

@@ -38,6 +38,7 @@ describe('contratos compartilhados', () => {
     expect(MQTT_TOPICS.mega.command.test).toBe('casa/mega/comando/teste');
     expect(MQTT_TOPICS.mega.status).toBe('casa/mega/status');
     expect(MQTT_TOPICS.mega.telemetry).toBe('casa/mega/telemetria/#');
+    expect(MQTT_TOPICS.mega.presence).toBe('casa/mega/telemetria/presenca');
   });
 
   it('rejeita comandos que ultrapassam os limites compartilhados', () => {

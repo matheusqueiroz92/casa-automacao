@@ -23,6 +23,18 @@
       "development": "./src/automation.ts",
       "default": "./dist/automation.js"
     },
+    "./mqtt": {
+      "types": "./src/mqtt.ts",
+      "react-native": "./src/mqtt.ts",
+      "development": "./src/mqtt.ts",
+      "default": "./dist/mqtt.js"
+    },
+    "./mqtt-topics": {
+      "types": "./src/mqtt-topics.ts",
+      "react-native": "./src/mqtt-topics.ts",
+      "development": "./src/mqtt-topics.ts",
+      "default": "./dist/mqtt-topics.js"
+    },
     "./validators": {
       "types": "./src/validators.ts",
       "react-native": "./src/validators.ts",
