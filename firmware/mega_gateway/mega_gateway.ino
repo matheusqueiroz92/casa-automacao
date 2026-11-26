@@ -8,6 +8,8 @@ const uint8_t PIN_SD_CS = 4;
 const uint8_t PIN_ETHERNET_CS = 10;
 const uint8_t MEGA_SPI_SS_PIN = 53;
 const uint8_t PIR_PIN = 25;
+const uint8_t ULTRASONIC_TRIG_PIN = 26;
+const uint8_t ULTRASONIC_ECHO_PIN = 27;
 
 struct RelayTestChannel {
   uint8_t pin;
@@ -45,6 +47,7 @@ const char TOPIC_RELAY_TEST_3_COMMAND[] = "casa/mega/comando/rele/3";
 const char TOPIC_AUTOMATION_RESPONSE[] = "casa/mega/evento/comando";
 const char TOPIC_UPTIME[] = "casa/mega/telemetria/uptime";
 const char TOPIC_PRESENCE[] = "casa/mega/telemetria/presenca";
+const char TOPIC_ULTRASONIC_DISTANCE[] = "casa/mega/telemetria/distancia_mm";
 
 // Limites soberanos do firmware. A API e o app usam os mesmos valores,
 // mas somente estas constantes determinam o que o Mega aceitaria executar.
@@ -63,6 +66,12 @@ const unsigned long MQTT_RECONNECT_INTERVAL_MS = 5000UL;
 const unsigned long HEARTBEAT_INTERVAL_MS = 30000UL;
 const unsigned long PIR_WARMUP_MS = 60000UL;
 const unsigned long PIR_DEBOUNCE_MS = 250UL;
+const unsigned long ULTRASONIC_MEASUREMENT_INTERVAL_MS = 2000UL;
+const unsigned long ULTRASONIC_REPUBLISH_INTERVAL_MS = 30000UL;
+const unsigned long ULTRASONIC_TIMEOUT_US = 30000UL;
+const uint16_t ULTRASONIC_MIN_DISTANCE_MM = 20;
+const uint16_t ULTRASONIC_MAX_DISTANCE_MM = 4000;
+const uint16_t ULTRASONIC_CHANGE_THRESHOLD_MM = 10;
 
 EthernetClient ethernetClient;
 MQTTClient mqttClient(256);
@@ -83,6 +92,15 @@ uint8_t pirStableState = LOW;
 uint8_t pirCandidateState = LOW;
 unsigned long pirWarmupStartedMs = 0;
 unsigned long pirCandidateSinceMs = 0;
+bool ultrasonicHasMeasurement = false;
+bool ultrasonicValid = false;
+bool ultrasonicPublishPending = false;
+bool ultrasonicHasPublished = false;
+bool ultrasonicLastPublishedValid = false;
+uint16_t ultrasonicDistanceMm = 0;
+uint16_t ultrasonicLastPublishedMm = 0;
+unsigned long lastUltrasonicMeasurementMs = 0;
+unsigned long lastUltrasonicPublishMs = 0;
 
 void printIp(const char *label, IPAddress address) {
   Serial.print(label);
@@ -124,6 +142,61 @@ void updatePirSensor() {
 
   Serial.print(F("PIR: "));
   Serial.println(pirStableState == HIGH ? F("presenca detectada") : F("ambiente sem movimento"));
+}
+
+uint16_t absoluteDifference(uint16_t first, uint16_t second) {
+  return first > second ? first - second : second - first;
+}
+
+void updateUltrasonicSensor() {
+  const unsigned long now = millis();
+  if (now - lastUltrasonicMeasurementMs < ULTRASONIC_MEASUREMENT_INTERVAL_MS) {
+    return;
+  }
+  lastUltrasonicMeasurementMs = now;
+
+  digitalWrite(ULTRASONIC_TRIG_PIN, LOW);
+  delayMicroseconds(2);
+  digitalWrite(ULTRASONIC_TRIG_PIN, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(ULTRASONIC_TRIG_PIN, LOW);
+
+  const unsigned long echoDurationUs =
+      pulseIn(ULTRASONIC_ECHO_PIN, HIGH, ULTRASONIC_TIMEOUT_US);
+  const unsigned long measuredDistanceMm = (echoDurationUs * 343UL) / 2000UL;
+  const bool measurementValid =
+      echoDurationUs > 0 &&
+      measuredDistanceMm >= ULTRASONIC_MIN_DISTANCE_MM &&
+      measuredDistanceMm <= ULTRASONIC_MAX_DISTANCE_MM;
+
+  ultrasonicHasMeasurement = true;
+  ultrasonicValid = measurementValid;
+  if (measurementValid) {
+    ultrasonicDistanceMm = (uint16_t)measuredDistanceMm;
+  }
+
+  const bool stateChanged =
+      !ultrasonicHasPublished || measurementValid != ultrasonicLastPublishedValid;
+  const bool distanceChanged =
+      measurementValid &&
+      ultrasonicLastPublishedValid &&
+      absoluteDifference(ultrasonicDistanceMm, ultrasonicLastPublishedMm) >=
+          ULTRASONIC_CHANGE_THRESHOLD_MM;
+  const bool republishDue =
+      now - lastUltrasonicPublishMs >= ULTRASONIC_REPUBLISH_INTERVAL_MS;
+
+  if (!stateChanged && !distanceChanged && !republishDue) {
+    return;
+  }
+
+  ultrasonicPublishPending = true;
+  if (measurementValid) {
+    Serial.print(F("Ultrassonico: "));
+    Serial.print(ultrasonicDistanceMm);
+    Serial.println(F(" mm"));
+  } else {
+    Serial.println(F("Ultrassonico: fora de alcance ou sem eco"));
+  }
 }
 
 bool containsOnlyDigits(const String &value) {
@@ -368,6 +441,10 @@ void connectMqttIfNeeded() {
     } else {
       mqttClient.publish(TOPIC_PRESENCE, "warming_up", true, 1);
     }
+
+    if (ultrasonicHasMeasurement) {
+      ultrasonicPublishPending = true;
+    }
   } else {
     Serial.print(F("falhou. Erro de rede="));
     Serial.print((int)mqttClient.lastError());
@@ -424,6 +501,31 @@ void publishPendingPirState() {
       1);
 }
 
+void publishPendingUltrasonicState() {
+  if (!ultrasonicHasMeasurement ||
+      !ultrasonicPublishPending ||
+      !mqttClient.connected()) {
+    return;
+  }
+
+  char payload[12];
+  if (ultrasonicValid) {
+    snprintf(payload, sizeof(payload), "%u", (unsigned int)ultrasonicDistanceMm);
+  } else {
+    snprintf(payload, sizeof(payload), "unavailable");
+  }
+
+  if (!mqttClient.publish(TOPIC_ULTRASONIC_DISTANCE, payload, true, 1)) {
+    return;
+  }
+
+  ultrasonicPublishPending = false;
+  ultrasonicHasPublished = true;
+  ultrasonicLastPublishedValid = ultrasonicValid;
+  ultrasonicLastPublishedMm = ultrasonicDistanceMm;
+  lastUltrasonicPublishMs = millis();
+}
+
 void setup() {
   // Define o nivel inativo antes de transformar os pinos em saida. Assim,
   // nenhum dos modulos recebe um pulso acidental durante o boot do Mega.
@@ -434,6 +536,10 @@ void setup() {
 
   pinMode(PIR_PIN, INPUT);
   pirWarmupStartedMs = millis();
+
+  digitalWrite(ULTRASONIC_TRIG_PIN, LOW);
+  pinMode(ULTRASONIC_TRIG_PIN, OUTPUT);
+  pinMode(ULTRASONIC_ECHO_PIN, INPUT);
 
   Serial.begin(115200);
   while (!Serial) {
@@ -454,6 +560,7 @@ void loop() {
   // O desligamento do rele tem prioridade sobre manutencao de rede e MQTT.
   updateRelayTest();
   updatePirSensor();
+  updateUltrasonicSensor();
   maintainEthernetConnection();
 
   if (networkReady) {
@@ -465,4 +572,5 @@ void loop() {
   publishPendingAutomationResponse();
   publishHeartbeatIfDue();
   publishPendingPirState();
+  publishPendingUltrasonicState();
 }

@@ -24,21 +24,30 @@ type PresenceViewState = {
   lastChange?: string;
 };
 
+type DistanceViewState = {
+  status: 'available' | 'unavailable' | 'unknown';
+  millimeters?: number;
+  lastChange?: string;
+};
+
 const DEVICE_STATE_REFRESH_INTERVAL_MS = 5000;
 
 export function useDashboardGateway(api: DashboardApi) {
   const [connection, setConnection] = useState<ConnectionState>({ status: 'loading' });
   const [diagnostic, setDiagnostic] = useState<DiagnosticState>({ status: 'idle' });
   const [presence, setPresence] = useState<PresenceViewState>({ status: 'unknown' });
+  const [distance, setDistance] = useState<DistanceViewState>({ status: 'unknown' });
 
   const refresh = useCallback(async () => {
     try {
       const response = await api.getMegaState();
       setConnection(toConnectionState(response));
       setPresence(toPresenceState(response));
+      setDistance(toDistanceState(response));
     } catch (error) {
       setConnection({ status: 'error', errorCode: readErrorCode(error) });
       setPresence({ status: 'unknown' });
+      setDistance({ status: 'unknown' });
     }
   }, [api]);
 
@@ -51,10 +60,12 @@ export function useDashboardGateway(api: DashboardApi) {
         if (!active) return;
         setConnection(toConnectionState(response));
         setPresence(toPresenceState(response));
+        setDistance(toDistanceState(response));
       } catch (error) {
         if (!active) return;
         setConnection({ status: 'error', errorCode: readErrorCode(error) });
         setPresence({ status: 'unknown' });
+        setDistance({ status: 'unknown' });
       }
     };
 
@@ -91,7 +102,15 @@ export function useDashboardGateway(api: DashboardApi) {
     [api],
   );
 
-  return { connection, diagnostic, presence, refresh, runAutomation, runDiagnostic };
+  return {
+    connection,
+    diagnostic,
+    distance,
+    presence,
+    refresh,
+    runAutomation,
+    runDiagnostic,
+  };
 }
 
 function readErrorCode(error: unknown): string {
@@ -119,4 +138,33 @@ function toPresenceState(response: DeviceStateResponse): PresenceViewState {
   }
 
   return { status, lastChange: presence.receivedAt };
+}
+
+function toDistanceState(response: DeviceStateResponse): DistanceViewState {
+  const distance = response.state.find(
+    (entry) => entry.topic === MQTT_TOPICS.mega.ultrasonicDistance,
+  );
+
+  if (!distance) {
+    return { status: 'unknown' };
+  }
+
+  if (distance.payload === 'unavailable') {
+    return { status: 'unavailable', lastChange: distance.receivedAt };
+  }
+
+  if (!/^\d+$/.test(distance.payload)) {
+    return { status: 'unknown' };
+  }
+
+  const millimeters = Number(distance.payload);
+  if (!Number.isInteger(millimeters) || millimeters < 20 || millimeters > 4000) {
+    return { status: 'unknown' };
+  }
+
+  return {
+    status: 'available',
+    millimeters,
+    lastChange: distance.receivedAt,
+  };
 }

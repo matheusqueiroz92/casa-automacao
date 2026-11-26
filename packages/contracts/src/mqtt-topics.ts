@@ -4,6 +4,7 @@ export const MQTT_TOPICS = {
     event: 'casa/mega/evento/#',
     telemetry: 'casa/mega/telemetria/#',
     presence: 'casa/mega/telemetria/presenca',
+    ultrasonicDistance: 'casa/mega/telemetria/distancia_mm',
     command: {
       feeding: 'casa/mega/comando/racao',
       irrigation: 'casa/mega/comando/irrigacao',

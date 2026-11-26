@@ -42,6 +42,25 @@ Durante os primeiros 60 segundos o firmware ignora leituras e publica
 `detected` ou `clear` com retencao e QoS 1. Uma mudanca precisa permanecer estavel
 por 250 ms. A leitura do PIR nao aciona relés ou outros atuadores.
 
+## Sensor ultrassonico HC-SR04
+
+O sensor usa dois pinos digitais do Mega:
+
+- `VCC` aos 5 V do Mega;
+- `TRIG` ao pino 26;
+- `ECHO` ao pino 27;
+- `GND` ao `GND` do Mega.
+
+O firmware mede a distancia a cada 2 segundos e publica o valor inteiro em
+milimetros, com retencao e QoS 1, no topico
+`casa/mega/telemetria/distancia_mm`. Leituras validas ficam entre 20 e 4000 mm.
+Quando nao ha eco confiavel, o payload publicado e `unavailable`.
+
+Uma nova leitura e publicada quando a distancia muda pelo menos 10 mm, quando a
+validade muda ou a cada 30 segundos. Esta telemetria nao aciona relés nem outros
+atuadores. A conversao em percentual de reservatorio deve ser feita somente
+depois da calibracao com as dimensoes reais do recipiente.
+
 ## Bibliotecas
 
 Use a biblioteca `Ethernet` que acompanha o Arduino IDE. Ela suporta o W5100 original.

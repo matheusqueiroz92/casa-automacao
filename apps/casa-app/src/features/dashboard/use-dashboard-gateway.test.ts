@@ -49,6 +49,7 @@ describe('useDashboardGateway', () => {
     await waitFor(() => expect(result.current.connection.status).toBe('online'));
     expect(result.current.connection.lastContact).toBe('2026-11-22T10:39:09.427Z');
     expect(result.current.presence.status).toBe('unknown');
+    expect(result.current.distance.status).toBe('unknown');
   });
 
   it('loads the latest PIR presence state', async () => {
@@ -73,6 +74,46 @@ describe('useDashboardGateway', () => {
 
     await waitFor(() => expect(result.current.presence.status).toBe('detected'));
     expect(result.current.presence.lastChange).toBe('2026-11-25T10:00:05.000Z');
+  });
+
+  it('loads the latest ultrasonic distance', async () => {
+    const api = createApi({
+      getMegaState: jest.fn().mockResolvedValue({
+        device: 'mega',
+        state: [
+          {
+            topic: 'casa/mega/telemetria/distancia_mm',
+            payload: '1234',
+            receivedAt: '2026-11-25T10:00:10.000Z',
+          },
+        ],
+      }),
+    });
+    const { result } = await renderHook(() => useDashboardGateway(api));
+
+    await waitFor(() => expect(result.current.distance.status).toBe('available'));
+    expect(result.current.distance.millimeters).toBe(1234);
+    expect(result.current.distance.lastChange).toBe('2026-11-25T10:00:10.000Z');
+  });
+
+  it('reports an ultrasonic measurement without echo as unavailable', async () => {
+    const api = createApi({
+      getMegaState: jest.fn().mockResolvedValue({
+        device: 'mega',
+        state: [
+          {
+            topic: 'casa/mega/telemetria/distancia_mm',
+            payload: 'unavailable',
+            receivedAt: '2026-11-25T10:00:12.000Z',
+          },
+        ],
+      }),
+    });
+    const { result } = await renderHook(() => useDashboardGateway(api));
+
+    await waitFor(() => expect(result.current.distance.status).toBe('unavailable'));
+    expect(result.current.distance.millimeters).toBeUndefined();
+    expect(result.current.distance.lastChange).toBe('2026-11-25T10:00:12.000Z');
   });
 
   it('publishes a diagnostic command and reports success', async () => {

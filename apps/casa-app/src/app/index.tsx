@@ -779,6 +779,19 @@ export default function DashboardScreen() {
                           : 'Sem leitura'
                   }
                 />
+                <SystemCard
+                  detail={formatLastContact(gateway.distance.lastChange)}
+                  icon="maximize-2"
+                  label="Sensor ultrassônico"
+                  statusColor={
+                    gateway.distance.status === 'available'
+                      ? colors.success
+                      : gateway.distance.status === 'unavailable'
+                        ? colors.warning
+                        : colors.textSubtle
+                  }
+                  value={formatDistance(gateway.distance)}
+                />
               </View>
 
               <View style={styles.sectionHeading}>
@@ -840,6 +853,18 @@ function formatLastContact(value: string | undefined): string {
     minute: '2-digit',
     second: '2-digit',
   }).format(date)}`;
+}
+
+function formatDistance(distance: {
+  status: 'available' | 'unavailable' | 'unknown';
+  millimeters?: number;
+}): string {
+  if (distance.status === 'unavailable') return 'Fora de alcance';
+  if (distance.status !== 'available' || distance.millimeters === undefined) {
+    return 'Sem leitura';
+  }
+
+  return `${(distance.millimeters / 10).toFixed(1).replace('.', ',')} cm`;
 }
 
 const styles = StyleSheet.create({
